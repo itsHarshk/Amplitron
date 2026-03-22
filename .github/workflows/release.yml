@@ -45,12 +45,25 @@ jobs:
           | **Linux** x64 | `Amplitron-Linux-x64.tar.gz` | Archive |
 
           ### Installation
-          - **Windows**: Run the `.exe` installer — includes Start Menu & Desktop shortcuts
-          - **macOS**: Open the `.dmg`, drag Amplitron to Applications
-          - **Linux**: Extract the archive, run `./amplitron.sh`
 
-          **Website**: https://sudip-mondal-2002.github.io/Amplitron/
-          **Contact**: sudmondal2002@gmail.com
+          **Windows**
+          1. Run `Amplitron-Windows-Setup.exe`
+          2. If SmartScreen appears, click **"More info"** → **"Run anyway"**
+          3. Follow the setup wizard — creates Start Menu & Desktop shortcuts
+
+          **macOS**
+          1. Open `Amplitron-macOS.dmg`, drag Amplitron to Applications
+          2. **First launch**: Right-click the app → **Open** → click **Open** in the dialog
+          3. Or run: `xattr -cr /Applications/Amplitron.app` then open normally
+
+          **Linux**
+          1. Extract the archive: `tar -xzf Amplitron-Linux-x64.tar.gz`
+          2. Run: `cd Amplitron-Linux && ./amplitron.sh`
+
+          > ⚠️ **Note**: Windows SmartScreen and macOS Gatekeeper warnings appear because the app is not yet code-signed with a paid certificate. The app is fully open-source — verify the code on GitHub.
+
+          **Website**: https://amplitron.sudipmondal.co.in
+          **Author**: Sudip Mondal (sudmondal2002@gmail.com)
 
   package-windows:
     name: Package Windows Installer

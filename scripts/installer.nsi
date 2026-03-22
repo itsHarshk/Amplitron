@@ -7,10 +7,12 @@
 ; Version metadata (helps Windows SmartScreen trust the installer)
 VIProductVersion "${APP_VERSION}"
 VIAddVersionKey "ProductName" "${APP_NAME}"
-VIAddVersionKey "CompanyName" "Amplitron"
+VIAddVersionKey "CompanyName" "Sudip Mondal"
 VIAddVersionKey "FileDescription" "Amplitron Guitar Amp Simulator Installer"
 VIAddVersionKey "FileVersion" "${APP_VERSION}"
-VIAddVersionKey "LegalCopyright" "MIT License"
+VIAddVersionKey "ProductVersion" "${APP_VERSION}"
+VIAddVersionKey "LegalCopyright" "Copyright (c) Sudip Mondal"
+VIAddVersionKey "OriginalFilename" "Amplitron-Windows-Setup.exe"
 
 Name "${APP_NAME}"
 OutFile "${OUTFILE}"
