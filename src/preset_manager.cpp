@@ -156,13 +156,6 @@ std::string PresetManager::to_json(const PresetData& preset) {
 }
 
 // Minimal JSON parser helpers
-static std::string trim(const std::string& s) {
-    size_t start = s.find_first_not_of(" \t\n\r");
-    if (start == std::string::npos) return "";
-    size_t end = s.find_last_not_of(" \t\n\r");
-    return s.substr(start, end - start + 1);
-}
-
 static std::string extract_string_value(const std::string& json, const std::string& key) {
     std::string search = "\"" + key + "\"";
     size_t pos = json.find(search);

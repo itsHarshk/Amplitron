@@ -78,6 +78,11 @@ set(IMGUI_SOURCES
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
+# Suppress warnings on vendored imgui sources
+if(NOT MSVC)
+    set_source_files_properties(${IMGUI_SOURCES} PROPERTIES COMPILE_FLAGS "-w")
+endif()
+
 # --- Application Sources ---
 set(APP_SOURCES
     src/main.cpp

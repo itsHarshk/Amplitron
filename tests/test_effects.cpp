@@ -198,7 +198,6 @@ TEST(compressor_reduces_dynamic_range) {
     // Scale to be loud
     for (int i = 0; i < 2048; ++i) buf[i] *= 0.9f;
 
-    float in_rms = rms(buf, 2048);
     // Process multiple times to let compressor engage
     for (int rep = 0; rep < 5; ++rep) {
         fill_sine(buf, 2048, 440.0f, 48000);
