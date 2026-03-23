@@ -35,6 +35,13 @@ private:
     BiquadState mid_peak_;
     BiquadState high_shelf_;
 
+    // Cached parameter values for dirty-check
+    float cached_bass_ = -999.0f;
+    float cached_mid_ = -999.0f;
+    float cached_treble_ = -999.0f;
+    float cached_presence_ = -999.0f;
+
+    void recompute_coefficients_if_dirty();
     void compute_low_shelf(float freq, float gain_db, float q);
     void compute_peaking(float freq, float gain_db, float q);
     void compute_high_shelf(float freq, float gain_db, float q);

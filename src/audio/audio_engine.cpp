@@ -3,6 +3,11 @@
 #include <iostream>
 #include <cctype>
 #include <algorithm>
+#include <chrono>
+
+#ifdef _WIN32
+#include <pa_win_wasapi.h>
+#endif
 
 namespace GuitarAmp {
 
@@ -37,14 +42,30 @@ bool AudioEngine::is_usb_device_name(const std::string& name) {
 }
 
 static int get_host_api_priority(PaHostApiTypeId type) {
-    // Higher = better for real-time audio on Windows
+    // Platform-aware priority: pick the lowest-latency host API per OS
+#if defined(__linux__)
     switch (type) {
-        case paASIO:          return 100;
-        case paWASAPI:        return 80;
+        case paJACK:          return 100;  // JACK is king on Linux
+        case paALSA:          return 70;
+        default:              return 10;
+    }
+#elif defined(_WIN32)
+    switch (type) {
+        case paASIO:          return 100;  // ASIO still best if available
+        case paWASAPI:        return 90;   // WASAPI Exclusive is excellent
         case paDirectSound:   return 40;
         case paMME:           return 10;
+        default:              return 20;
+    }
+#elif defined(__APPLE__)
+    switch (type) {
+        case paCoreAudio:     return 100;
         default:              return 30;
     }
+#else
+    (void)type;
+    return 30;
+#endif
 }
 
 static bool is_projector_or_hdmi(const std::string& name) {
@@ -233,25 +254,52 @@ bool AudioEngine::start() {
 
     const PaDeviceInfo* in_dev = Pa_GetDeviceInfo(input_device_);
     const PaDeviceInfo* out_dev = Pa_GetDeviceInfo(output_device_);
+    (void)in_dev; (void)out_dev;  // used only in platform-specific blocks below
+
+    // Compute desired latency from the user's buffer size setting.
+    // Do NOT use defaultLowInputLatency — on macOS built-in mic it can be >200ms.
+    double desired_latency = static_cast<double>(buffer_size_) / sample_rate_;
 
     PaStreamParameters input_params;
     input_params.device = input_device_;
     input_params.channelCount = 1;
     input_params.sampleFormat = paFloat32;
-    // Use the device's own low-latency suggestion
-    input_params.suggestedLatency = in_dev ? in_dev->defaultLowInputLatency : 0.01;
+    input_params.suggestedLatency = desired_latency;
     input_params.hostApiSpecificStreamInfo = nullptr;
 
     PaStreamParameters output_params;
     output_params.device = output_device_;
     output_params.channelCount = 1;
     output_params.sampleFormat = paFloat32;
-    output_params.suggestedLatency = out_dev ? out_dev->defaultLowOutputLatency : 0.01;
+    output_params.suggestedLatency = desired_latency;
     output_params.hostApiSpecificStreamInfo = nullptr;
 
-    // Use paFramesPerBufferUnspecified to let the driver pick optimal buffer size
-    // This avoids forcing a buffer size that the driver can't handle efficiently
-    unsigned long frames = paFramesPerBufferUnspecified;
+#ifdef _WIN32
+    // WASAPI Exclusive Mode: bypass the Windows audio mixer for minimal latency
+    PaWasapiStreamInfo wasapi_in_info = {};
+    PaWasapiStreamInfo wasapi_out_info = {};
+    if (in_dev) {
+        const PaHostApiInfo* api = Pa_GetHostApiInfo(in_dev->hostApi);
+        if (api && api->type == paWASAPI) {
+            wasapi_in_info.size = sizeof(PaWasapiStreamInfo);
+            wasapi_in_info.hostApiType = paWASAPI;
+            wasapi_in_info.version = 1;
+            wasapi_in_info.flags = paWinWasapiExclusive;
+            input_params.hostApiSpecificStreamInfo = &wasapi_in_info;
+
+            wasapi_out_info.size = sizeof(PaWasapiStreamInfo);
+            wasapi_out_info.hostApiType = paWASAPI;
+            wasapi_out_info.version = 1;
+            wasapi_out_info.flags = paWinWasapiExclusive;
+            output_params.hostApiSpecificStreamInfo = &wasapi_out_info;
+
+            std::cout << "  Using WASAPI Exclusive Mode" << std::endl;
+        }
+    }
+#endif
+
+    // Use the user's configured buffer size for minimum latency
+    unsigned long frames = static_cast<unsigned long>(buffer_size_);
 
     PaError err = Pa_OpenStream(
         &stream_,
@@ -542,22 +590,29 @@ int AudioEngine::audio_callback(const void* input, void* output,
 }
 
 void AudioEngine::process_audio(const float* input, float* output, int frame_count) {
+    auto t_start = std::chrono::steady_clock::now();
+
     // Safety: ensure process buffer is large enough
     if (frame_count > static_cast<int>(process_buffer_.size())) {
         process_buffer_.resize(frame_count, 0.0f);
     }
 
+    // Drain lock-free command queue (GUI -> Audio)
+    drain_commands();
+
     // Copy input to processing buffer with gain
+    float in_gain = input_gain_.load(std::memory_order_relaxed);
     float peak_in = 0.0f;
     for (int i = 0; i < frame_count; ++i) {
-        process_buffer_[i] = input[i] * input_gain_;
+        process_buffer_[i] = input[i] * in_gain;
         float abs_val = std::fabs(process_buffer_[i]);
         if (abs_val > peak_in) peak_in = abs_val;
     }
     input_level_.store(peak_in);
 
-    // Process through effect chain (lock-free in audio thread ideally,
-    // but using try_lock to avoid blocking)
+    // Process through effect chain
+    // Structural changes (add/remove/move) still use try_lock for safety;
+    // parameter changes are fully lock-free via the SPSC queue above.
     if (effect_mutex_.try_lock()) {
         for (auto& fx : effects_) {
             if (fx->is_enabled()) {
@@ -568,10 +623,10 @@ void AudioEngine::process_audio(const float* input, float* output, int frame_cou
     }
 
     // Copy to output with gain
+    float out_gain = output_gain_.load(std::memory_order_relaxed);
     float peak_out = 0.0f;
     for (int i = 0; i < frame_count; ++i) {
-        output[i] = process_buffer_[i] * output_gain_;
-        // Safety clamp
+        output[i] = process_buffer_[i] * out_gain;
         output[i] = clamp(output[i], -1.0f, 1.0f);
         float abs_val = std::fabs(output[i]);
         if (abs_val > peak_out) peak_out = abs_val;
@@ -582,6 +637,117 @@ void AudioEngine::process_audio(const float* input, float* output, int frame_cou
     if (recorder_.is_recording()) {
         recorder_.write_samples(output, frame_count);
     }
+
+    // CPU load measurement
+    auto t_end = std::chrono::steady_clock::now();
+    float duration_us = std::chrono::duration<float, std::micro>(t_end - t_start).count();
+    callback_duration_us_.store(duration_us, std::memory_order_relaxed);
+    float budget_us = (static_cast<float>(frame_count) / sample_rate_) * 1e6f;
+    cpu_load_.store(duration_us / budget_us, std::memory_order_relaxed);
+}
+
+// --- Lock-free command drain (called from audio thread) ---
+
+void AudioEngine::drain_commands() {
+    AudioCommand cmd;
+    while (command_queue_.try_pop(cmd)) {
+        switch (cmd.type) {
+            case AudioCommand::SetEffectParam:
+                if (cmd.effect_index >= 0 &&
+                    cmd.effect_index < static_cast<int>(effects_.size())) {
+                    auto& params = effects_[cmd.effect_index]->params();
+                    if (cmd.param_index >= 0 &&
+                        cmd.param_index < static_cast<int>(params.size())) {
+                        params[cmd.param_index].value = cmd.value;
+                    }
+                }
+                break;
+            case AudioCommand::SetEffectEnabled:
+                if (cmd.effect_index >= 0 &&
+                    cmd.effect_index < static_cast<int>(effects_.size())) {
+                    effects_[cmd.effect_index]->set_enabled(cmd.value > 0.5f);
+                }
+                break;
+            case AudioCommand::SetEffectMix:
+                if (cmd.effect_index >= 0 &&
+                    cmd.effect_index < static_cast<int>(effects_.size())) {
+                    effects_[cmd.effect_index]->set_mix(cmd.value);
+                }
+                break;
+            case AudioCommand::SetInputGain:
+                input_gain_.store(cmd.value, std::memory_order_relaxed);
+                break;
+            case AudioCommand::SetOutputGain:
+                output_gain_.store(cmd.value, std::memory_order_relaxed);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+// --- GUI-thread push methods ---
+
+void AudioEngine::set_input_gain(float gain) {
+    AudioCommand cmd{};
+    cmd.type = AudioCommand::SetInputGain;
+    cmd.value = gain;
+    command_queue_.try_push(cmd);
+    input_gain_.store(gain, std::memory_order_relaxed);  // immediate read-back for GUI
+}
+
+void AudioEngine::set_output_gain(float gain) {
+    AudioCommand cmd{};
+    cmd.type = AudioCommand::SetOutputGain;
+    cmd.value = gain;
+    command_queue_.try_push(cmd);
+    output_gain_.store(gain, std::memory_order_relaxed);
+}
+
+void AudioEngine::push_param_change(int effect_index, int param_index, float value) {
+    AudioCommand cmd{};
+    cmd.type = AudioCommand::SetEffectParam;
+    cmd.effect_index = effect_index;
+    cmd.param_index = param_index;
+    cmd.value = value;
+    command_queue_.try_push(cmd);
+}
+
+void AudioEngine::push_effect_enabled(int effect_index, float enabled) {
+    AudioCommand cmd{};
+    cmd.type = AudioCommand::SetEffectEnabled;
+    cmd.effect_index = effect_index;
+    cmd.value = enabled;
+    command_queue_.try_push(cmd);
+}
+
+void AudioEngine::push_effect_mix(int effect_index, float mix) {
+    AudioCommand cmd{};
+    cmd.type = AudioCommand::SetEffectMix;
+    cmd.effect_index = effect_index;
+    cmd.value = mix;
+    command_queue_.try_push(cmd);
+}
+
+// --- Buffer auto-tuning ---
+
+int AudioEngine::get_suggested_buffer_size() const {
+    float load = cpu_load_.load(std::memory_order_relaxed);
+    int current = buffer_size_;
+
+    // If consistently overloaded (>80%), suggest next larger buffer
+    if (load > 0.80f) {
+        if (current < MAX_BUFFER_SIZE) {
+            return std::min(current * 2, MAX_BUFFER_SIZE);
+        }
+    }
+    // If consistently underloaded (<30%), suggest next smaller buffer
+    if (load < 0.30f) {
+        if (current > MIN_BUFFER_SIZE) {
+            return std::max(current / 2, MIN_BUFFER_SIZE);
+        }
+    }
+    return current;  // no change
 }
 
 } // namespace GuitarAmp

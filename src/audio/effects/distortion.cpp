@@ -26,8 +26,8 @@ void Distortion::process(float* buffer, int num_samples) {
         // Apply drive gain
         float x = buffer[i] * drive;
 
-        // Hard clipping with asymmetric waveshaping
-        x = std::tanh(x);
+        // Hard clipping with asymmetric waveshaping (Padé approximant, ~3× faster)
+        x = fast_tanh(x);
 
         // Additional harmonic content via soft clip
         x = soft_clip(x * 1.5f);

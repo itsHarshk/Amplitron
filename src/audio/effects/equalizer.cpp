@@ -14,9 +14,12 @@ Equalizer::Equalizer() {
 
 void Equalizer::set_sample_rate(int sample_rate) {
     Effect::set_sample_rate(sample_rate);
-    compute_low_shelf(200.0f, params_[0].value, 0.7f);
-    compute_peaking(800.0f, params_[1].value, 1.0f);
-    compute_high_shelf(3000.0f, params_[2].value, 0.7f);
+    // Force recomputation on next process() call
+    cached_bass_ = -999.0f;
+    cached_mid_ = -999.0f;
+    cached_treble_ = -999.0f;
+    cached_presence_ = -999.0f;
+    recompute_coefficients_if_dirty();
 }
 
 void Equalizer::compute_low_shelf(float freq, float gain_db, float q) {
@@ -66,13 +69,29 @@ void Equalizer::compute_high_shelf(float freq, float gain_db, float q) {
     high_shelf_.a2 = ((A + 1) - (A - 1) * cos_w0 - 2 * sqA * alpha) / a0;
 }
 
+void Equalizer::recompute_coefficients_if_dirty() {
+    float bass = params_[0].value;
+    float mid = params_[1].value;
+    float treble = params_[2].value;
+    float presence = params_.size() > 3 ? params_[3].value : 0.0f;
+
+    if (bass != cached_bass_ || mid != cached_mid_ ||
+        treble != cached_treble_ || presence != cached_presence_) {
+        compute_low_shelf(200.0f, bass, 0.7f);
+        compute_peaking(800.0f, mid, 1.0f);
+        compute_high_shelf(3000.0f, treble, 0.7f);
+        cached_bass_ = bass;
+        cached_mid_ = mid;
+        cached_treble_ = treble;
+        cached_presence_ = presence;
+    }
+}
+
 void Equalizer::process(float* buffer, int num_samples) {
     if (!enabled_) return;
 
-    // Recompute coefficients (lightweight for real-time)
-    compute_low_shelf(200.0f, params_[0].value, 0.7f);
-    compute_peaking(800.0f, params_[1].value, 1.0f);
-    compute_high_shelf(3000.0f, params_[2].value, 0.7f);
+    // Only recompute biquad coefficients when parameters actually changed
+    recompute_coefficients_if_dirty();
 
     for (int i = 0; i < num_samples; ++i) {
         float x = buffer[i];

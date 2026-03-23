@@ -400,6 +400,36 @@ void GuiManager::render_settings_window() {
     float latency_ms = 1000.0f * engine_.get_buffer_size() / engine_.get_sample_rate();
     ImGui::Text("Estimated latency: %.1f ms", latency_ms);
 
+    // CPU load watchdog & auto-tuning
+    float cpu_load = engine_.get_cpu_load();
+    ImGui::Spacing();
+    ImVec4 load_color = (cpu_load > 0.80f) ? ImVec4(1.0f, 0.2f, 0.2f, 1.0f) :
+                         (cpu_load > 0.50f) ? ImVec4(1.0f, 0.8f, 0.2f, 1.0f) :
+                                              ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+    ImGui::TextColored(load_color, "CPU Load: %.0f%%", cpu_load * 100.0f);
+    ImGui::SameLine();
+    ImGui::ProgressBar(cpu_load, ImVec2(150, 0));
+
+    int suggested = engine_.get_suggested_buffer_size();
+    if (suggested != engine_.get_buffer_size()) {
+        ImGui::SameLine();
+        char suggest_label[64];
+        std::snprintf(suggest_label, sizeof(suggest_label),
+                      "Switch to %d", suggested);
+        if (ImGui::SmallButton(suggest_label)) {
+            engine_.set_buffer_size(suggested);
+        }
+    }
+
+    bool auto_buf = engine_.is_auto_buffer_enabled();
+    if (ImGui::Checkbox("Auto-tune buffer size", &auto_buf)) {
+        engine_.set_auto_buffer_enabled(auto_buf);
+    }
+    if (auto_buf && suggested != engine_.get_buffer_size()) {
+        engine_.set_buffer_size(suggested);
+    }
+    ImGui::Spacing();
+
     // Sample rate
     int sr = engine_.get_sample_rate();
     const int rates[] = {44100, 48000, 96000};

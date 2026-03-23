@@ -22,7 +22,6 @@ private:
 
     AudioEngine& engine_;
     std::vector<std::unique_ptr<PedalWidget>> widgets_;
-    int dragging_index_ = -1;
 };
 
 } // namespace GuitarAmp

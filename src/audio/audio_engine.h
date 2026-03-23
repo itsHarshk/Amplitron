@@ -3,7 +3,9 @@
 #include "common.h"
 #include "audio/effect.h"
 #include "audio/recorder.h"
+#include "audio/spsc_queue.h"
 #include <portaudio.h>
+#include <chrono>
 
 namespace GuitarAmp {
 
@@ -58,11 +60,22 @@ public:
     float get_input_level() const { return input_level_.load(); }
     float get_output_level() const { return output_level_.load(); }
 
-    // Master volume
-    void set_input_gain(float gain) { input_gain_ = gain; }
-    void set_output_gain(float gain) { output_gain_ = gain; }
-    float get_input_gain() const { return input_gain_; }
-    float get_output_gain() const { return output_gain_; }
+    // Master volume (lock-free via SPSC queue)
+    void set_input_gain(float gain);
+    void set_output_gain(float gain);
+    float get_input_gain() const { return input_gain_.load(std::memory_order_relaxed); }
+    float get_output_gain() const { return output_gain_.load(std::memory_order_relaxed); }
+
+    // Lock-free parameter updates from GUI thread
+    void push_param_change(int effect_index, int param_index, float value);
+    void push_effect_enabled(int effect_index, float enabled);
+    void push_effect_mix(int effect_index, float mix);
+
+    // CPU load monitoring for buffer auto-tuning
+    float get_cpu_load() const { return cpu_load_.load(std::memory_order_relaxed); }
+    int get_suggested_buffer_size() const;
+    bool is_auto_buffer_enabled() const { return auto_buffer_enabled_; }
+    void set_auto_buffer_enabled(bool enabled) { auto_buffer_enabled_ = enabled; }
 
     // Recording
     Recorder& recorder() { return recorder_; }
@@ -88,8 +101,8 @@ private:
     int sample_rate_ = DEFAULT_SAMPLE_RATE;
     int buffer_size_ = DEFAULT_BUFFER_SIZE;
 
-    float input_gain_ = 1.0f;
-    float output_gain_ = 0.8f;
+    std::atomic<float> input_gain_{1.0f};
+    std::atomic<float> output_gain_{0.8f};
 
     std::atomic<float> input_level_{0.0f};
     std::atomic<float> output_level_{0.0f};
@@ -99,6 +112,15 @@ private:
     std::mutex effect_mutex_;
     Recorder recorder_;
     std::string last_error_;
+
+    // Lock-free GUI -> Audio command queue (256 slots)
+    SPSCQueue<AudioCommand, 256> command_queue_;
+    void drain_commands();
+
+    // CPU load watchdog for buffer auto-tuning
+    std::atomic<float> cpu_load_{0.0f};
+    std::atomic<float> callback_duration_us_{0.0f};
+    bool auto_buffer_enabled_ = false;
 };
 
 } // namespace GuitarAmp
