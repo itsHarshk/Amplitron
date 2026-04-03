@@ -146,4 +146,77 @@ std::string show_save_dialog(const std::string& default_name,
 }
 #endif
 
+#ifdef _WIN32
+std::string show_folder_dialog(const std::string& title) {
+    BROWSEINFOA bi;
+    std::memset(&bi, 0, sizeof(bi));
+    bi.lpszTitle = title.c_str();
+    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+
+    LPITEMIDLIST pidl = SHBrowseForFolderA(&bi);
+    if (!pidl) return "";
+
+    char path[MAX_PATH];
+    bool ok = SHGetPathFromIDListA(pidl, path);
+    CoTaskMemFree(pidl);
+    return ok ? std::string(path) : "";
+}
+
+#elif defined(__APPLE__)
+std::string show_folder_dialog(const std::string& title) {
+    std::string cmd = "osascript -e 'POSIX path of (choose folder with prompt \""
+                      + title + "\")' 2>/dev/null";
+
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe) return "";
+
+    char buf[1024];
+    std::string result;
+    while (fgets(buf, sizeof(buf), pipe)) {
+        result += buf;
+    }
+    pclose(pipe);
+
+    while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+        result.pop_back();
+
+    // osascript returns paths with trailing slash; strip it for consistency
+    if (!result.empty() && result.back() == '/') result.pop_back();
+
+    return result;
+}
+
+#else // Linux
+std::string show_folder_dialog(const std::string& title) {
+    std::string cmd = "zenity --file-selection --directory "
+                      "--title='" + title + "' 2>/dev/null";
+
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe) return "";
+
+    char buf[1024];
+    std::string result;
+    while (fgets(buf, sizeof(buf), pipe)) {
+        result += buf;
+    }
+    int status = pclose(pipe);
+
+    if (status != 0) {
+        cmd = "kdialog --getexistingdirectory ~/ --title '" + title + "' 2>/dev/null";
+        pipe = popen(cmd.c_str(), "r");
+        if (!pipe) return "";
+        result.clear();
+        while (fgets(buf, sizeof(buf), pipe)) {
+            result += buf;
+        }
+        pclose(pipe);
+    }
+
+    while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+        result.pop_back();
+
+    return result;
+}
+#endif
+
 } // namespace GuitarAmp

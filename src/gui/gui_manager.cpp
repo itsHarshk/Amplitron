@@ -3,6 +3,7 @@
 #include "gui/theme.h"
 #include "gui/file_dialog.h"
 #include "gui/command.h"
+#include "preset_manager.h"
 
 #include "gui/gl_setup.h"
 #include <imgui.h>
@@ -161,6 +162,8 @@ bool GuiManager::initialize(int width, int height) {
     pedal_board_ = std::make_unique<PedalBoard>(engine_, command_history_);
     gui_presets_.set_pedal_board(pedal_board_.get());
 
+    PresetManager::load_config();
+
 #ifndef EMSCRIPTEN
     update_check_thread_ = std::thread([this]() { this->check_for_updates(); });
 #endif
@@ -317,6 +320,15 @@ void GuiManager::render_menu_bar() {
                                        gui_presets_.selected_preset_index() < gui_presets_.preset_count();
             if (ImGui::MenuItem("Delete Selected Preset", nullptr, false, has_selected_preset)) {
                 gui_presets_.delete_preset_by_index(gui_presets_.selected_preset_index());
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Change Presets Directory...")) {
+                std::string chosen = show_folder_dialog("Select Presets Directory");
+                if (!chosen.empty()) {
+                    PresetManager::set_presets_dir(chosen);
+                    PresetManager::save_config();
+                    gui_presets_.refresh_presets(false);
+                }
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Settings")) show_settings_ = true;
