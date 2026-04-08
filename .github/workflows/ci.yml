@@ -467,15 +467,18 @@ jobs:
         COUNT=$(git rev-list --count HEAD)
         echo "version=0.1.${COUNT}" >> $GITHUB_OUTPUT
 
-    - name: Cache SDL2 FetchContent
+    - name: Cache CMake configure output (Xcode project + SDL2)
+      id: cmake-cache
       uses: actions/cache@v5
       with:
-        path: build-ios/_deps
-        key: ios-sdl2-deps-2.30.12-${{ runner.os }}
+        path: build-ios
+        key: ios-cmake-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'ios/Info.plist') }}
+        restore-keys: |
+          ios-cmake-${{ runner.os }}-
 
     - name: Configure (CMake → Xcode)
+      if: steps.cmake-cache.outputs.cache-hit != 'true'
       run: |
-        mkdir -p build-ios
         cmake \
           -DCMAKE_SYSTEM_NAME=iOS \
           -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
@@ -496,7 +499,9 @@ jobs:
           -derivedDataPath ios-derived \
           ONLY_ACTIVE_ARCH=NO \
           CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-          build | xcpretty --color
+          build 2>&1 | tee /tmp/xcode.log | xcpretty --color; \
+        STATUS=${PIPESTATUS[0]}; \
+        [ $STATUS -eq 0 ] || { echo "=== FULL XCODE LOG ==="; cat /tmp/xcode.log; exit $STATUS; }
 
     - name: Validate .app bundle
       run: |
