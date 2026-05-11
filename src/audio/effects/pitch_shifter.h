@@ -1,5 +1,7 @@
 #pragma once
 
+// Pitch shifting effect for semitone-based transposition.
+
 #include "audio/effect.h"
 #include <vector>
 

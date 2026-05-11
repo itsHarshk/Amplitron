@@ -1,5 +1,7 @@
 #pragma once
 
+// Algorithmic reverb for adding room and tail reflections.
+
 #include "audio/effect.h"
 
 namespace Amplitron {

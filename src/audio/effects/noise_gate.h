@@ -1,5 +1,7 @@
 #pragma once
 
+// Noise gate that attenuates low-level input between notes.
+
 #include "audio/effect.h"
 #include "audio/dsp/envelope_follower.h"
 

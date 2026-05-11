@@ -1,5 +1,7 @@
 #pragma once
 
+// Chromatic tuner based on pitch detection from the input signal.
+
 #include "audio/effect.h"
 #include <atomic>
 

@@ -1,5 +1,7 @@
 #pragma once
 
+// Lightweight speaker cabinet filtering for guitar amp output shaping.
+
 #include "audio/effect.h"
 #include "audio/dsp/biquad.h"
 

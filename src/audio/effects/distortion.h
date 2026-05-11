@@ -1,5 +1,7 @@
 #pragma once
 
+// Hard-clipping distortion effect with tone shaping.
+
 #include "audio/effect.h"
 #include "audio/dsp/biquad.h"
 

@@ -1,5 +1,7 @@
 #pragma once
 
+// Octave generator for sub-octave and upper-octave guitar tones.
+
 #include "audio/effect.h"
 
 namespace Amplitron {

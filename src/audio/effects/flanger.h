@@ -1,5 +1,7 @@
 #pragma once
 
+// Short modulated delay effect for comb-filter sweep sounds.
+
 #include "audio/effect.h"
 
 namespace Amplitron {

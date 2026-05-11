@@ -1,5 +1,7 @@
 #pragma once
 
+// Multi-band equalizer for tone correction and pedal-chain shaping.
+
 #include "audio/effect.h"
 #include "audio/dsp/biquad.h"
 

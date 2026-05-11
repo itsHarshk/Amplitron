@@ -1,5 +1,7 @@
 #pragma once
 
+// Wah filter with manual and envelope-following sweep modes.
+
 #include "audio/effect.h"
 #include "audio/dsp/envelope_follower.h"
 

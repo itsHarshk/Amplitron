@@ -1,5 +1,7 @@
 #pragma once
 
+// Preamp and tone-stack models for classic guitar amplifier voicings.
+
 #include "audio/effect.h"
 #include "audio/dsp/biquad.h"
 

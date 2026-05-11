@@ -1,5 +1,7 @@
 #pragma once
 
+// Tempo-independent delay line with feedback and wet/dry control.
+
 #include "audio/effect.h"
 #include "audio/dsp/biquad.h"
 

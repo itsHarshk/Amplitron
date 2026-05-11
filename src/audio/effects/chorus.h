@@ -1,5 +1,7 @@
 #pragma once
 
+// Modulated delay effect that thickens the signal with chorus movement.
+
 #include "audio/effect.h"
 
 namespace Amplitron {

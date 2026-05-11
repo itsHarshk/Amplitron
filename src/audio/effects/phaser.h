@@ -1,5 +1,7 @@
 #pragma once
 
+// Cascaded all-pass phaser with LFO modulation.
+
 #include "audio/effect.h"
 #include <array>
 

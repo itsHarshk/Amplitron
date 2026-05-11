@@ -1,5 +1,7 @@
 #pragma once
 
+// Dynamic range compressor for smoothing guitar input levels.
+
 #include "audio/effect.h"
 #include "audio/dsp/envelope_follower.h"
 

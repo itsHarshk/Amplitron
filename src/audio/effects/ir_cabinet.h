@@ -1,5 +1,7 @@
 #pragma once
 
+// Impulse-response based cabinet simulation for recorded speaker tones.
+
 #include "audio/effect.h"
 #include "audio/dsp/convolution_engine.h"
 #include <atomic>

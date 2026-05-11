@@ -1,5 +1,7 @@
 #pragma once
 
+// Soft-clipping overdrive effect for tube-style saturation.
+
 #include "audio/effect.h"
 #include "audio/dsp/biquad.h"
 
