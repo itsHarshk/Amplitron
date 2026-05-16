@@ -77,7 +77,6 @@ endif()
 
 # RtMidi (MIDI input)
 # Skip auto-detection when paths are provided explicitly (e.g. CI -D flags).
-set(RTMIDI_AVAILABLE FALSE)
 if(NOT RTMIDI_LIBRARIES)
     if(PkgConfig_FOUND)
         pkg_check_modules(RTMIDI rtmidi)
@@ -92,11 +91,6 @@ if(NOT RTMIDI_LIBRARIES)
                   "C:/Program Files/rtmidi/lib"
                   "${CMAKE_SOURCE_DIR}/external/rtmidi")
     endif()
-        if(RTMIDI_INCLUDE_DIRS AND RTMIDI_LIBRARIES
-       AND NOT RTMIDI_INCLUDE_DIRS MATCHES "-NOTFOUND"
-       AND NOT RTMIDI_LIBRARIES MATCHES "-NOTFOUND")
-        set(RTMIDI_AVAILABLE TRUE)
-    endif()
 endif()
 # pkg_check_modules sets RTMIDI_LIBRARIES to just the name ("rtmidi") and
 # RTMIDI_LIBRARY_DIRS to the directory (/opt/homebrew/lib).  Without
@@ -104,10 +98,6 @@ endif()
 # explicitly.  This is a no-op when RTMIDI_LIBRARIES is a full path.
 if(RTMIDI_LIBRARY_DIRS)
     link_directories(${RTMIDI_LIBRARY_DIRS})
-endif()
-
-if(NOT RTMIDI_AVAILABLE)
-    add_compile_definitions(AMPLITRON_NO_MIDI)
 endif()
 
 # OpenGL
@@ -133,33 +123,7 @@ if(NOT MSVC)
 endif()
 
 # --- kiss_fft (bundled, BSD-3-Clause) ---
-set(KISS_FFT_DIR ${CMAKE_SOURCE_DIR}/external/kiss_fft)
-set(KISS_FFT_FILES
-    kiss_fft.h
-    kiss_fft.c
-    _kiss_fft_guts.h
-    kiss_fft_log.h
-)
-set(KISS_FFT_URL_BASE https://raw.githubusercontent.com/mborgerding/kissfft/master)
-
-if(NOT EXISTS ${KISS_FFT_DIR}/kiss_fft.c OR NOT EXISTS ${KISS_FFT_DIR}/kiss_fft.h)
-    file(MAKE_DIRECTORY ${KISS_FFT_DIR})
-    foreach(KISS_FFT_FILE IN LISTS KISS_FFT_FILES)
-        file(DOWNLOAD
-            "${KISS_FFT_URL_BASE}/${KISS_FFT_FILE}"
-            "${KISS_FFT_DIR}/${KISS_FFT_FILE}"
-            SHOW_PROGRESS
-            STATUS download_status
-            LOG download_log
-        )
-        list(GET download_status 0 download_status_code)
-        if(NOT download_status_code EQUAL 0)
-            message(FATAL_ERROR "Failed to download ${KISS_FFT_FILE}: ${download_log}")
-        endif()
-    endforeach()
-endif()
-
-set(KISS_FFT_SOURCES ${KISS_FFT_DIR}/kiss_fft.c)
+set(KISS_FFT_SOURCES ${CMAKE_SOURCE_DIR}/external/kiss_fft/kiss_fft.c)
 if(NOT MSVC)
     set_source_files_properties(${KISS_FFT_SOURCES} PROPERTIES COMPILE_FLAGS "-w")
 endif()
@@ -220,7 +184,7 @@ set(APP_SOURCES
 
 # --- MIDI Support (desktop only) ---
 set(MIDI_SOURCES)
-if(RTMIDI_AVAILABLE)
+if(NOT EMSCRIPTEN AND NOT ANDROID AND NOT IOS)
     list(APPEND MIDI_SOURCES
         src/midi/midi_manager.cpp
         src/midi/midi_manager_mapping.cpp
@@ -441,25 +405,14 @@ else() # NOT EMSCRIPTEN, ANDROID, or IOS
         ${RTMIDI_INCLUDE_DIRS}
     )
 
-    if(RTMIDI_AVAILABLE)
-        target_include_directories(Amplitron PRIVATE ${RTMIDI_INCLUDE_DIRS})
-    endif()
-
     target_compile_definitions(Amplitron PRIVATE AMPLITRON_VERSION="${AMPLITRON_VERSION}")
-    if(RTDIMI_AVAILABLE)
+
     target_link_libraries(Amplitron PRIVATE
         ${PORTAUDIO_LIBRARIES}
         ${SDL2_LIBRARIES}
         ${OPENGL_LIBRARIES}
         ${RTMIDI_LIBRARIES}
     )
-    else()
-        target_link_libraries(Amplitron PRIVATE
-            ${PORTAUDIO_LIBRARIES}
-            ${SDL2_LIBRARIES}
-            ${OPENGL_LIBRARIES}
-        )
-    endif()
 
     if(WIN32)
         target_link_libraries(Amplitron PRIVATE winmm ole32 setupapi comdlg32 shell32)
@@ -529,13 +482,11 @@ else() # NOT EMSCRIPTEN, ANDROID, or IOS
     )
 
     # Desktop-only MIDI support for tests
-    if(RTMIDI_AVAILABLE)
     list(APPEND CORE_SOURCES
         src/midi/midi_manager.cpp
         src/midi/midi_manager_mapping.cpp
         src/midi/midi_manager_persist.cpp
     )
-    endif()
 
     add_executable(amplitron-tests ${TEST_SOURCES} ${CORE_SOURCES} ${KISS_FFT_SOURCES})
 
@@ -552,24 +503,12 @@ else() # NOT EMSCRIPTEN, ANDROID, or IOS
         ${RTMIDI_INCLUDE_DIRS}
     )
 
-    if(RTMIDI_AVAILABLE)
-        target_include_directories(amplitron-tests PRIVATE ${RTMIDI_INCLUDE_DIRS})
-    endif()
-
-    if(RTMIDI_AVAILABLE)
     target_link_libraries(amplitron-tests PRIVATE
         ${PORTAUDIO_LIBRARIES}
         ${SDL2_LIBRARIES}
         ${OPENGL_LIBRARIES}
         ${RTMIDI_LIBRARIES}
     )
-    else()
-        target_link_libraries(amplitron-tests PRIVATE
-            ${PORTAUDIO_LIBRARIES}
-            ${SDL2_LIBRARIES}
-            ${OPENGL_LIBRARIES}
-        )
-    endif()
 
     if(WIN32)
         target_link_libraries(amplitron-tests PRIVATE winmm ole32 setupapi)
